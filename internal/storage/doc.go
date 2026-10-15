@@ -1,3 +1,3 @@
-// Пакет storage содержит доступ к хранилищам сервиса api-gateway:
-// GORM-репозитории, миграции и интеграцию с outbox/inbox.
+// Пакет storage содержит хранилища периметра: Redis-кэш проверки ключей
+// (контракт 7.2) и счетчики лимитов (Redis и in-process fallback).
 package storage
