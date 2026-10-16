@@ -1,5 +1,5 @@
-// stub - тестовый апстрим для e2e периметра: отвечает 200 JSON с эхом пути,
-// идентификатора запроса и признака авторизации; в продуктовый образ не входит.
+// stub is a test upstream for the perimeter e2e: it responds 200 JSON echoing the path,
+// the request id and the authorization flag; it is not part of the production image.
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// response описывает тело ответа stub-апстрима.
+// response describes the stub upstream response body.
 type response struct {
 	Upstream   string `json:"upstream"`
 	Path       string `json:"path"`
@@ -22,7 +22,7 @@ type response struct {
 	ReceivedAt string `json:"received_at"`
 }
 
-// main поднимает stub-сервер на :9000.
+// main starts the stub server on :9000.
 func main() {
 	addr := os.Getenv("STUB_ADDR")
 	if addr == "" {

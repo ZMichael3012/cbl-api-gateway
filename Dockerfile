@@ -1,6 +1,6 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-# Контекст - каталог services/: replace ../cbl-kit требует соседний модуль.
+# The context is the services/ directory: the ../cbl-kit replace requires the neighboring module.
 COPY cbl-kit/go.mod cbl-kit/go.sum ./cbl-kit/
 COPY cbl-api-gateway/go.mod cbl-api-gateway/go.sum ./cbl-api-gateway/
 RUN cd cbl-api-gateway && go mod download

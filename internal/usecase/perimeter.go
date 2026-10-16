@@ -12,42 +12,42 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/domain"
 )
 
-// degradationLogInterval задает частоту журнала деградации: при 3000 RPS
-// запись на каждый запрос превратила бы логи в поток, поэтому сбой зависимости
-// фиксируется не чаще одного раза в интервал.
+// degradationLogInterval sets the degradation log rate: at 3000 RPS a record
+// per request would turn logs into a stream, so a dependency failure is
+// recorded at most once per interval.
 const degradationLogInterval = 5 * time.Second
 
-// Counter считает обращения в окне лимита (Redis или локальный fallback).
+// Counter counts requests within a limit window (Redis or local fallback).
 type Counter interface {
-	// Incr увеличивает счетчик ключа окна и возвращает значение после инкремента.
+	// Incr increments the window key counter and returns the post-increment value.
 	Incr(ctx context.Context, key string, ttl time.Duration) (int64, error)
 }
 
-// KeyPeeker читает кэш проверки API-ключей apikey:v1:*, который заполняет
-// Billing API (контракт 7.2 FR-6).
+// KeyPeeker reads the API key check cache apikey:v1:* populated by the
+// Billing API (contract 7.2 FR-6).
 type KeyPeeker interface {
-	// Get возвращает значение ключа; found=false при промахе.
+	// Get returns the key value; found is false on a miss.
 	Get(ctx context.Context, key string) (string, bool, error)
 }
 
-// KeyCheck описывает исход контроля ключа на периметре.
+// KeyCheck describes the outcome of API key control at the perimeter.
 type KeyCheck struct {
-	// Deny запрещает запрос без обращения к Billing API (tombstone отзыва).
+	// Deny rejects the request without calling the Billing API (revocation tombstone).
 	Deny bool
-	// MerchantID содержит владельца ключа при подтвержденном кэше.
+	// MerchantID holds the key owner when the cache confirms the key.
 	MerchantID string
 }
 
-// LimitDecision описывает решение лимита запроса.
+// LimitDecision describes a request limit decision.
 type LimitDecision struct {
-	// Allowed разрешает проксирование запроса.
+	// Allowed permits proxying the request.
 	Allowed bool
-	// RetryAfter задает остаток окна для заголовка Retry-After при отказе.
+	// RetryAfter sets the remaining window for the Retry-After header on rejection.
 	RetryAfter time.Duration
 }
 
-// Perimeter применяет правила периметра: контроль ключа по кэшу Billing API и
-// лимит на мерчанта в окне фиксированной длительности.
+// Perimeter applies the perimeter rules: API key control via the Billing API
+// cache and a per-merchant limit within a fixed-length window.
 type Perimeter struct {
 	keys    KeyPeeker
 	counter Counter
@@ -59,9 +59,9 @@ type Perimeter struct {
 	lastWarn time.Time
 }
 
-// NewPerimeter собирает правила периметра; лимит и окно обязаны быть
-// положительными (невалидная конфигурация - отказ старта, а не тихий пропуск).
-// Окно ключей контракта CBL-003 - одна секунда (значение задает main).
+// NewPerimeter builds the perimeter rules; the limit and the window must be
+// positive (invalid configuration fails startup instead of silently passing).
+// The CBL-003 contract key window is one second (the value is set by main).
 func NewPerimeter(keys KeyPeeker, counter Counter, log *zap.Logger, limit int64, window time.Duration) (*Perimeter, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf("rate limit must be positive: %d", limit)
@@ -78,9 +78,10 @@ func NewPerimeter(keys KeyPeeker, counter Counter, log *zap.Logger, limit int64,
 	return &Perimeter{keys: keys, counter: counter, log: log, limit: limit, window: window}, nil
 }
 
-// CheckKey читает кэш проверки: deny запрещает запрос, ok подтверждает
-// мерчанта, промах, ошибка Redis и испорченное значение делегируют решение
-// Billing API (периметр не выносит авторитетных решений о неизвестном ключе).
+// CheckKey reads the check cache: deny rejects the request, ok confirms the
+// merchant, and a miss, a Redis error or a corrupted value delegates the
+// decision to the Billing API (the perimeter does not make authoritative
+// decisions about an unknown key).
 func (p *Perimeter) CheckKey(ctx context.Context, tokenHash string) KeyCheck {
 	if p.keys == nil {
 		return KeyCheck{}
@@ -88,7 +89,7 @@ func (p *Perimeter) CheckKey(ctx context.Context, tokenHash string) KeyCheck {
 	value, present, err := p.keys.Get(ctx, domain.APIKeyCacheKey(tokenHash))
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			// Клиент оборвал запрос: это не сбой зависимости.
+			// The client aborted the request: this is not a dependency failure.
 			return KeyCheck{}
 		}
 		p.warnDegraded("api key cache read failed, request is delegated to billing api", err)
@@ -106,9 +107,10 @@ func (p *Perimeter) CheckKey(ctx context.Context, tokenHash string) KeyCheck {
 	return KeyCheck{}
 }
 
-// Allow считает запрос в окне фиксированной длительности и решает, пропускать
-// ли его; при недоступности обоих счетчиков запрос пропускается (доступность
-// периметра важнее, авторитетная проверка ключа остается за Billing API).
+// Allow counts the request within the fixed-length window and decides whether
+// to pass it; when both counters are unavailable the request is passed
+// (perimeter availability is more important, the authoritative key check
+// remains with the Billing API).
 func (p *Perimeter) Allow(ctx context.Context, identity, route string, now time.Time) LimitDecision {
 	windowIndex := now.UnixNano() / int64(p.window)
 	key := domain.RateLimitKey(identity, route, windowIndex)
@@ -127,7 +129,7 @@ func (p *Perimeter) Allow(ctx context.Context, identity, route string, now time.
 	return LimitDecision{Allowed: false, RetryAfter: windowEnd.Sub(now)}
 }
 
-// warnDegraded пишет журнал деградации не чаще degradationLogInterval.
+// warnDegraded logs degradation at most once per degradationLogInterval.
 func (p *Perimeter) warnDegraded(message string, err error) {
 	now := time.Now()
 	p.logMu.Lock()

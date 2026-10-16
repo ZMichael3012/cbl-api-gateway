@@ -16,23 +16,23 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// Config описывает зависимости сборки маршрутов периметра.
+// Config describes the dependencies for building the perimeter routes.
 type Config struct {
-	// Perimeter применяет контроль ключей и лимиты на маршрутах /v1.
+	// Perimeter applies API key control and limits on /v1 routes.
 	Perimeter *usecase.Perimeter
-	// BillingAPI задает апстрим мерчант API.
+	// BillingAPI sets the merchant API upstream.
 	BillingAPI *url.URL
-	// Backoffice задает апстрим операторского API.
+	// Backoffice sets the operator API upstream.
 	Backoffice *url.URL
-	// UpstreamTimeout задает бюджет ожидания ответа апстрима.
+	// UpstreamTimeout sets the upstream response wait budget.
 	UpstreamTimeout time.Duration
-	// Log задает логгер сервиса.
+	// Log sets the service logger.
 	Log *zap.Logger
 }
 
-// NewRouter собирает HTTP-маршрутизацию периметра: /v1 с контролем ключа и
-// лимитом, /admin/v1 без лимита мерчанта (RBAC - 12.x), остальное - 404
-// problem+json; сбои апстримов отдаются как 503 (контракт 7.1).
+// NewRouter builds the perimeter HTTP routing: /v1 with API key control and a
+// limit, /admin/v1 without a merchant limit (RBAC is 12.x), everything else -
+// 404 problem+json; upstream failures are returned as 503 (contract 7.1).
 func NewRouter(cfg Config) (*gin.Engine, error) {
 	if cfg.Perimeter == nil {
 		return nil, errors.New("perimeter is required")
@@ -48,8 +48,9 @@ func NewRouter(cfg Config) (*gin.Engine, error) {
 	}
 
 	router := gin.New()
-	// Редиректы отключены: 301 на POST теряет тело и ломает контракт;
-	// нормализацию путей делает апстрим-контракт, а не периметр.
+	// Redirects are disabled: a 301 on POST drops the body and breaks the
+	// contract; path normalization belongs to the upstream contract, not the
+	// perimeter.
 	router.RedirectTrailingSlash = false
 	router.RedirectFixedPath = false
 	router.Use(
@@ -83,12 +84,12 @@ func NewRouter(cfg Config) (*gin.Engine, error) {
 	return router, nil
 }
 
-// proxyHandler адаптирует reverse proxy к обработчику Gin: обертка скрывает
-// необязательные интерфейсы gin (его CloseNotify паникует на несрастимом
-// Writer, например httptest.Recorder); отмена запроса отслеживается контекстом
-// запроса, который сервер отменяет при обрыве соединения клиента. Заголовок
-// X-Request-Id, заранее выставленный ginmw, снимается: заголовок ответа
-// апстрима добавляется через Header.Add и без снятия дал бы дубль.
+// proxyHandler adapts the reverse proxy to a Gin handler: the wrapper hides
+// gin's optional interfaces (its CloseNotify panics on an incompatible Writer,
+// for example httptest.Recorder); request cancellation is tracked through the
+// request context, which the server cancels when the client connection drops.
+// The X-Request-Id header preset by ginmw is removed: the upstream response
+// header is added via Header.Add and without removal it would be duplicated.
 func proxyHandler(proxy *httputil.ReverseProxy) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Del(ginmw.HeaderRequestID)
@@ -96,13 +97,13 @@ func proxyHandler(proxy *httputil.ReverseProxy) gin.HandlerFunc {
 	}
 }
 
-// proxyWriter прячет CloseNotify gin от ReverseProxy и пробрасывает Flush для
-// потоковых ответов.
+// proxyWriter hides gin's CloseNotify from ReverseProxy and forwards Flush for
+// streaming responses.
 type proxyWriter struct {
 	http.ResponseWriter
 }
 
-// Flush отправляет накопленный буфер, если нижележащий Writer это умеет.
+// Flush sends the accumulated buffer if the underlying Writer supports it.
 func (w proxyWriter) Flush() {
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()

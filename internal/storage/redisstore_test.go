@@ -9,31 +9,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRedisStoreGate проверяет предохранитель деградации: в окне после сбоя
-// обращения к Redis нет, запросы сразу получают признак деградации, после
-// окна попытка повторяется.
+// TestRedisStoreGate checks the degradation circuit breaker: within the
+// window after a failure there are no Redis calls and requests immediately
+// get the degradation flag; after the window the attempt is repeated.
 func TestRedisStoreGate(t *testing.T) {
 	store, err := NewRedisStore("127.0.0.1:1")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 
 	_, _, err = store.Get(context.Background(), "key")
-	require.Error(t, err, "первое обращение к недоступному Redis падает")
-	require.NotErrorIs(t, err, ErrDegraded, "первая ошибка - не деградация")
+	require.Error(t, err, "the first call to an unavailable Redis fails")
+	require.NotErrorIs(t, err, ErrDegraded, "the first error is not degradation")
 
 	_, _, err = store.Get(context.Background(), "key")
-	require.ErrorIs(t, err, ErrDegraded, "повтор в окне деградации не обращается к Redis")
+	require.ErrorIs(t, err, ErrDegraded, "a repeat within the degradation window does not call Redis")
 
 	store.mu.Lock()
 	store.degradedUntil = time.Now().Add(-time.Millisecond)
 	store.mu.Unlock()
 	_, _, err = store.Get(context.Background(), "key")
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, ErrDegraded, "после окна попытка повторяется")
+	assert.NotErrorIs(t, err, ErrDegraded, "after the window the attempt is repeated")
 }
 
-// TestRedisStoreGateCanceled проверяет, что отмена клиента не взводит
-// предохранитель (это не сбой зависимости).
+// TestRedisStoreGateCanceled checks that a client cancellation does not trip
+// the breaker (it is not a dependency failure).
 func TestRedisStoreGateCanceled(t *testing.T) {
 	store, err := NewRedisStore("127.0.0.1:1")
 	require.NoError(t, err)
@@ -46,5 +46,5 @@ func TestRedisStoreGateCanceled(t *testing.T) {
 	store.mu.Lock()
 	degraded := !store.degradedUntil.IsZero()
 	store.mu.Unlock()
-	assert.False(t, degraded, "отмена клиента не взводит предохранитель")
+	assert.False(t, degraded, "a client cancellation does not trip the breaker")
 }

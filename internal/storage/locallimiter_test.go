@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLocalLimiterIncr проверяет инкремент и независимость ключей.
+// TestLocalLimiterIncr checks incrementing and key independence.
 func TestLocalLimiterIncr(t *testing.T) {
 	limiter := NewLocalLimiter()
 	ctx := context.Background()
@@ -21,10 +21,10 @@ func TestLocalLimiterIncr(t *testing.T) {
 	}
 	count, err := limiter.Incr(ctx, "rl:b:route:1", time.Minute)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), count, "разные ключи считаются независимо")
+	assert.Equal(t, int64(1), count, "different keys are counted independently")
 }
 
-// TestLocalLimiterExpiry проверяет переиспользование истекшей записи.
+// TestLocalLimiterExpiry checks reuse of an expired entry.
 func TestLocalLimiterExpiry(t *testing.T) {
 	limiter := NewLocalLimiter()
 	ctx := context.Background()
@@ -34,11 +34,11 @@ func TestLocalLimiterExpiry(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	second, err := limiter.Incr(ctx, "rl:a:route:1", time.Minute)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), second, "истекшее окно начинается с нуля")
+	assert.Equal(t, int64(1), second, "an expired window starts from zero")
 }
 
-// TestLocalLimiterSweep проверяет уборку истекших записей: периодический
-// вызов sweep не дает карте расти при потоке уникальных ключей.
+// TestLocalLimiterSweep checks sweeping of expired entries: the periodic
+// sweep call keeps the map from growing under a stream of unique keys.
 func TestLocalLimiterSweep(t *testing.T) {
 	limiter := NewLocalLimiter()
 	now := time.Now()
@@ -49,7 +49,7 @@ func TestLocalLimiterSweep(t *testing.T) {
 	assert.Contains(t, limiter.counts, "live")
 }
 
-// TestLocalLimiterConcurrent проверяет атомарность инкрементов.
+// TestLocalLimiterConcurrent checks the atomicity of increments.
 func TestLocalLimiterConcurrent(t *testing.T) {
 	limiter := NewLocalLimiter()
 	ctx := context.Background()

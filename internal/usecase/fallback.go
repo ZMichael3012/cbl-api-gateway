@@ -9,11 +9,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewFallbackCounter собирает счетчик с fallback: при ошибке основного
-// (Redis) используется локальный счетчик инстанса (T-11: потеря Redis
-// деградирует точность лимита, а не отказывает в обслуживании). Журнал
-// деградации троттлится: при высоком RPS ошибка зависимости не превращается
-// в поток записей.
+// NewFallbackCounter builds a counter with a fallback: when the primary
+// (Redis) counter fails, the local instance counter is used (T-11: losing
+// Redis degrades limit accuracy instead of denying service). Degradation
+// logging is throttled: at high RPS a dependency failure does not turn into
+// a stream of records.
 func NewFallbackCounter(primary, fallback Counter, log *zap.Logger) Counter {
 	if log == nil {
 		log = zap.NewNop()
@@ -27,7 +27,7 @@ func NewFallbackCounter(primary, fallback Counter, log *zap.Logger) Counter {
 	return &fallbackCounter{primary: primary, fallback: fallback, log: log}
 }
 
-// fallbackCounter переключает счет на локальный при отказе основного.
+// fallbackCounter switches counting to the local counter when the primary fails.
 type fallbackCounter struct {
 	primary  Counter
 	fallback Counter
@@ -37,7 +37,7 @@ type fallbackCounter struct {
 	lastWarn time.Time
 }
 
-// Incr пробует основной счетчик и при ошибке считает локально.
+// Incr tries the primary counter and counts locally on failure.
 func (c *fallbackCounter) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
 	count, err := c.primary.Incr(ctx, key, ttl)
 	if err == nil {
@@ -49,7 +49,7 @@ func (c *fallbackCounter) Incr(ctx context.Context, key string, ttl time.Duratio
 	return c.fallback.Incr(ctx, key, ttl)
 }
 
-// warnDegraded пишет журнал деградации не чаще degradationLogInterval.
+// warnDegraded logs degradation at most once per degradationLogInterval.
 func (c *fallbackCounter) warnDegraded(err error) {
 	now := time.Now()
 	c.mu.Lock()

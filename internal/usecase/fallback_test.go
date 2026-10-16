@@ -12,7 +12,7 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// TestFallbackCounterPrimary проверяет штатный путь через основной счетчик.
+// TestFallbackCounterPrimary verifies the normal path through the primary counter.
 func TestFallbackCounterPrimary(t *testing.T) {
 	primary := &fakeCounter{}
 	fallback := &fakeCounter{}
@@ -24,18 +24,18 @@ func TestFallbackCounterPrimary(t *testing.T) {
 	assert.Empty(t, fallback.keys)
 }
 
-// TestFallbackCounterDegrade проверяет переключение на локальный счетчик.
+// TestFallbackCounterDegrade verifies switching to the local counter.
 func TestFallbackCounterDegrade(t *testing.T) {
 	primary := &fakeCounter{err: errors.New("redis down")}
 	fallback := &fakeCounter{}
 	counter := usecase.NewFallbackCounter(primary, fallback, nil)
 	count, err := counter.Incr(context.Background(), "key", time.Second)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), count, "решение принимает локальный счетчик")
+	assert.Equal(t, int64(1), count, "the local counter makes the decision")
 	assert.Equal(t, 1, len(fallback.keys))
 }
 
-// TestFallbackCounterEdges проверяет вырожденные комбинации зависимостей.
+// TestFallbackCounterEdges verifies degenerate dependency combinations.
 func TestFallbackCounterEdges(t *testing.T) {
 	fallback := &fakeCounter{}
 	assert.Equal(t, usecase.Counter(fallback), usecase.NewFallbackCounter(nil, fallback, nil))

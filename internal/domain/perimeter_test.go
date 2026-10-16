@@ -11,7 +11,7 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/domain"
 )
 
-// TestAuthorizationToken проверяет строгий разбор Bearer-заголовка (правила 7.2).
+// TestAuthorizationToken checks strict Bearer header parsing (7.2 rules).
 func TestAuthorizationToken(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -38,7 +38,7 @@ func TestAuthorizationToken(t *testing.T) {
 	}
 }
 
-// TestTokenHash проверяет известный вектор sha256 и нижний регистр.
+// TestTokenHash checks the known sha256 vector and lower case.
 func TestTokenHash(t *testing.T) {
 	assert.Equal(t,
 		"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
@@ -46,12 +46,12 @@ func TestTokenHash(t *testing.T) {
 	assert.Equal(t, 64, len(domain.TokenHash("cbl_v1_0123456789_secret")))
 }
 
-// TestAPIKeyCacheKey проверяет форму ключа кэша проверки (контракт 7.2 FR-6).
+// TestAPIKeyCacheKey checks the shape of the check cache key (contract 7.2 FR-6).
 func TestAPIKeyCacheKey(t *testing.T) {
 	assert.Equal(t, "apikey:v1:abc", domain.APIKeyCacheKey("abc"))
 }
 
-// TestParseKeyCacheValue проверяет матрицу значений кэша проверки.
+// TestParseKeyCacheValue checks the matrix of check cache values.
 func TestParseKeyCacheValue(t *testing.T) {
 	uuidString := uuid.NewString()
 	tests := []struct {
@@ -82,7 +82,7 @@ func TestParseKeyCacheValue(t *testing.T) {
 	}
 }
 
-// TestRouteGroup проверяет нормализацию первой группы пути.
+// TestRouteGroup checks normalization of the first path group.
 func TestRouteGroup(t *testing.T) {
 	tests := []struct {
 		path  string
@@ -108,14 +108,14 @@ func TestRouteGroup(t *testing.T) {
 	}
 }
 
-// TestIdentityKey проверяет идентификатор лимита для известного и неизвестного ключа.
+// TestIdentityKey checks the rate limit identity for a known and an unknown key.
 func TestIdentityKey(t *testing.T) {
 	merchantID := uuid.NewString()
 	assert.Equal(t, merchantID, domain.IdentityKey(merchantID, "hash"))
 	assert.Equal(t, "token:hash", domain.IdentityKey("", "hash"))
 }
 
-// TestRateLimitKey проверяет форму ключа счетчика лимита (CBL-003 раздел 7).
+// TestRateLimitKey checks the shape of the rate limit counter key (CBL-003 section 7).
 func TestRateLimitKey(t *testing.T) {
 	require.Equal(t, "rl:01912f2f-7d5e-7000-8000-000000000000:invoices:1700000000",
 		domain.RateLimitKey("01912f2f-7d5e-7000-8000-000000000000", "invoices", 1700000000))

@@ -6,32 +6,33 @@ import (
 	"time"
 )
 
-// sweepInterval задает периодичность уборки истекших записей (каждые N
-// инкрементов), чтобы карта не росла бесконечно при потоке уникальных ключей.
+// sweepInterval sets how often expired entries are swept (every N increments)
+// so the map does not grow indefinitely under a stream of unique keys.
 const sweepInterval = 1024
 
-// LocalLimiter считает окна в памяти процесса: fallback при недоступности
-// Redis и локальный режим без REDIS_ADDR; при нескольких репликах эффективный
-// лимит умножается на их число (trade-off периметра).
+// LocalLimiter counts windows in process memory: the fallback when Redis is
+// unavailable and the local mode without REDIS_ADDR; with several replicas
+// the effective limit is multiplied by their number (perimeter trade-off).
 type LocalLimiter struct {
 	mu     sync.Mutex
 	counts map[string]localWindow
 	ops    int
 }
 
-// localWindow хранит счетчик и момент истечения записи окна.
+// localWindow stores the counter and the expiration moment of a window entry.
 type localWindow struct {
 	count     int64
 	expiresAt time.Time
 }
 
-// NewLocalLimiter создает локальный лимитер.
+// NewLocalLimiter creates a local limiter.
 func NewLocalLimiter() *LocalLimiter {
 	return &LocalLimiter{counts: make(map[string]localWindow)}
 }
 
-// Incr увеличивает счетчик ключа, живущий до ttl (для ключей окна ttl
-// покрывает окно с запасом); истекшая запись переиспользуется с нуля.
+// Incr increments the counter of a key that lives until ttl (for window keys
+// the ttl covers the window with a margin); an expired entry is reused from
+// zero.
 func (l *LocalLimiter) Incr(_ context.Context, key string, ttl time.Duration) (int64, error) {
 	now := time.Now()
 	l.mu.Lock()
@@ -49,7 +50,8 @@ func (l *LocalLimiter) Incr(_ context.Context, key string, ttl time.Duration) (i
 	return entry.count, nil
 }
 
-// sweep удаляет истекшие записи; вызывается редко, стоимость амортизирована.
+// sweep deletes expired entries; it is called rarely, so its cost is
+// amortized.
 func (l *LocalLimiter) sweep(now time.Time) {
 	for key, entry := range l.counts {
 		if !entry.expiresAt.After(now) {

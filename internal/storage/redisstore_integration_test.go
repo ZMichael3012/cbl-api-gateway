@@ -18,7 +18,7 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/storage"
 )
 
-// startRedis поднимает Redis 7 в testcontainers и возвращает адрес.
+// startRedis starts Redis 7 in testcontainers and returns the address.
 func startRedis(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
@@ -39,7 +39,7 @@ func startRedis(t *testing.T) string {
 	return fmt.Sprintf("%s:%s", host, port.Port())
 }
 
-// newClient собирает клиент для проверки состояния Redis в тестах.
+// newClient builds a client to check the Redis state in tests.
 func newClient(t *testing.T, addr string) *redis.Client {
 	t.Helper()
 	client := redis.NewClient(&redis.Options{Addr: addr})
@@ -47,7 +47,7 @@ func newClient(t *testing.T, addr string) *redis.Client {
 	return client
 }
 
-// TestRedisStoreGet проверяет чтение значений кэша проверки ключей.
+// TestRedisStoreGet checks reading values from the key check cache.
 func TestRedisStoreGet(t *testing.T) {
 	ctx := context.Background()
 	addr := startRedis(t)
@@ -65,11 +65,12 @@ func TestRedisStoreGet(t *testing.T) {
 
 	_, found, err = store.Get(ctx, "apikey:v1:missing")
 	require.NoError(t, err)
-	assert.False(t, found, "промах - не ошибка")
+	assert.False(t, found, "a miss is not an error")
 }
 
-// TestRedisStoreIncrSetsTTLForExternalKey проверяет, что ключ, созданный
-// извне без TTL, получает TTL первым инкрементом (иначе счетчик не истечет).
+// TestRedisStoreIncrSetsTTLForExternalKey checks that a key created
+// externally without a TTL gets a TTL from the first increment (otherwise the
+// counter would not expire).
 func TestRedisStoreIncrSetsTTLForExternalKey(t *testing.T) {
 	ctx := context.Background()
 	addr := startRedis(t)
@@ -81,18 +82,18 @@ func TestRedisStoreIncrSetsTTLForExternalKey(t *testing.T) {
 	require.NoError(t, client.Set(ctx, "rl:m:invoices:1700000001", "41", 0).Err())
 	ttl, err := client.TTL(ctx, "rl:m:invoices:1700000001").Result()
 	require.NoError(t, err)
-	require.Less(t, ttl, time.Duration(0), "ключ без TTL")
+	require.Less(t, ttl, time.Duration(0), "the key has no TTL")
 
 	count, err := store.Incr(ctx, "rl:m:invoices:1700000001", 2*time.Second)
 	require.NoError(t, err)
 	assert.Equal(t, int64(42), count)
 	ttl, err = client.PTTL(ctx, "rl:m:invoices:1700000001").Result()
 	require.NoError(t, err)
-	assert.Greater(t, ttl, time.Duration(0), "TTL выставлен предохранительно")
+	assert.Greater(t, ttl, time.Duration(0), "a TTL was set as a safeguard")
 }
 
-// TestRedisStoreIncrAtomic проверяет атомарность счетчика при параллельных
-// инкрементах (атака параллельными запросами не обходит лимит).
+// TestRedisStoreIncrAtomic checks counter atomicity under concurrent
+// increments (a concurrent request attack does not bypass the limit).
 func TestRedisStoreIncrAtomic(t *testing.T) {
 	ctx := context.Background()
 	addr := startRedis(t)
@@ -121,6 +122,6 @@ func TestRedisStoreIncrAtomic(t *testing.T) {
 	assert.Equal(t, int64(workers*perWorker+1), count)
 	ttl, err := client.PTTL(ctx, "rl:m:invoices:1700000000").Result()
 	require.NoError(t, err)
-	assert.Greater(t, ttl, time.Duration(0), "TTL выставлен")
+	assert.Greater(t, ttl, time.Duration(0), "a TTL was set")
 	assert.LessOrEqual(t, ttl, 2*time.Second)
 }

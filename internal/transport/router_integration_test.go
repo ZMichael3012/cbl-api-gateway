@@ -26,8 +26,8 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// startRedisIntegration поднимает Redis 7 в testcontainers и возвращает клиент
-// и адрес для сервиса периметра.
+// startRedisIntegration starts Redis 7 in testcontainers and returns the
+// client and the address for the perimeter service.
 func startRedisIntegration(t *testing.T) (*redis.Client, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -51,7 +51,7 @@ func startRedisIntegration(t *testing.T) (*redis.Client, string) {
 	return client, addr
 }
 
-// newIntegrationRouter собирает периметр на реальном Redis и stub-апстриме.
+// newIntegrationRouter builds the perimeter on a real Redis and a stub upstream.
 func newIntegrationRouter(t *testing.T, addr string, limit int64) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -75,8 +75,8 @@ func newIntegrationRouter(t *testing.T, addr string, limit int64) *gin.Engine {
 	return router
 }
 
-// TestPerimeterChainIntegration проверяет цепочку периметра на реальном Redis:
-// подтверждение ключа, лимит, tombstone и делегирование промаха.
+// TestPerimeterChainIntegration verifies the perimeter chain on a real Redis:
+// key confirmation, the limit, the tombstone and miss delegation.
 func TestPerimeterChainIntegration(t *testing.T) {
 	ctx := context.Background()
 	client, addr := startRedisIntegration(t)
@@ -87,8 +87,9 @@ func TestPerimeterChainIntegration(t *testing.T) {
 	allowedHash := domain.TokenHash(allowedToken)
 	require.NoError(t, client.Set(ctx, domain.APIKeyCacheKey(allowedHash), "ok:"+merchantID, time.Minute).Err())
 
-	// Всплеск запросов: все проходят в апстрим, сверхлимитные отклоняются 429
-	// (границы окна не позволяют зафиксировать точный номер отказа).
+	// A burst of requests: requests within the limit are proxied to the
+	// upstream, over-limit ones are rejected with 429 (window boundaries do
+	// not allow fixing the exact rejection number).
 	authorization := "Bearer " + allowedToken
 	statuses := make([]int, 0, 10)
 	for request := 0; request < 10; request++ {
@@ -102,11 +103,11 @@ func TestPerimeterChainIntegration(t *testing.T) {
 		case http.StatusTooManyRequests:
 			limited++
 		default:
-			t.Fatalf("неожиданный статус: %d", status)
+			t.Fatalf("unexpected status: %d", status)
 		}
 	}
-	assert.GreaterOrEqual(t, allowed, 2, "в пределах лимита запросы проксируются")
-	assert.GreaterOrEqual(t, limited, 1, "сверхлимитные запросы отклоняются")
+	assert.GreaterOrEqual(t, allowed, 2, "requests within the limit are proxied")
+	assert.GreaterOrEqual(t, limited, 1, "over-limit requests are rejected")
 	if limited > 0 {
 		denied := doRouter(router, http.MethodGet, "/v1/invoices", authorization)
 		if denied.Code == http.StatusTooManyRequests {
@@ -115,11 +116,12 @@ func TestPerimeterChainIntegration(t *testing.T) {
 			require.NoError(t, json.Unmarshal(denied.Body.Bytes(), &problem))
 			assert.Equal(t, "rate_limited", problem.Code)
 		} else {
-			assert.Equal(t, http.StatusOK, denied.Code, "граница окна могла открыть счет заново")
+			assert.Equal(t, http.StatusOK, denied.Code, "the window boundary may have restarted the count")
 		}
 	}
 
-	// Счетчик живет в Redis с TTL; на границе секунды ключей окна может быть два.
+	// The counter lives in Redis with a TTL; at the second boundary there may
+	// be two window keys.
 	keys, err := client.Keys(ctx, "rl:"+merchantID+":invoices:*").Result()
 	require.NoError(t, err)
 	require.NotEmpty(t, keys)
@@ -128,18 +130,18 @@ func TestPerimeterChainIntegration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, ttl, time.Duration(0))
 
-	// Tombstone отозванного ключа отсекается без вызова апстрима.
+	// The revoked key tombstone is rejected without calling the upstream.
 	deniedToken := "cbl_v1_0123456789_revoked"
 	deniedHash := domain.TokenHash(deniedToken)
 	require.NoError(t, client.Set(ctx, domain.APIKeyCacheKey(deniedHash), "deny", time.Minute).Err())
 	response := doRouter(router, http.MethodGet, "/v1/invoices", "Bearer "+deniedToken)
 	require.Equal(t, http.StatusUnauthorized, response.Code)
 
-	// Промах кэша делегируется BFF и лимитируется по токену.
+	// A cache miss is delegated to the BFF and limited by token.
 	missToken := "cbl_v1_0123456789_cold"
 	miss := doRouter(router, http.MethodGet, "/v1/invoices", "Bearer "+missToken)
 	require.Equal(t, http.StatusOK, miss.Code)
 	keys, err = client.Keys(ctx, "rl:token:"+domain.TokenHash(missToken)+":invoices:*").Result()
 	require.NoError(t, err)
-	assert.Len(t, keys, 1, "промах лимитируется по корзине токена")
+	assert.Len(t, keys, 1, "a miss is limited by the token bucket")
 }

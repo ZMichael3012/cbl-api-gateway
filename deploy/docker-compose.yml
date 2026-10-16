@@ -6,20 +6,20 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
-    # Порт на хост не публикуется: e2e сеет ключи через `compose exec`
-    # (хост-порт 6379 может быть занят локальным Redis), а passwordless Redis -
-    # якорь аутентификации (KI-api-gateway-02), которому не место в сети.
+    # The port is not published to the host: the e2e seeds keys via `compose exec`
+    # (host port 6379 may be taken by a local Redis), and a passwordless Redis is
+    # the authentication anchor (KI-api-gateway-02), which does not belong on the network.
     networks: [cbl-net]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
-  # stub - тестовый апстрим e2e: отвечает 200 на любой путь; в продукт не входит.
+  # stub is the e2e test upstream: it responds 200 to any path; it is not part of production.
   stub:
     build:
       context: ..
-      dockerfile: test/e2e/stub/Dockerfile
+      dockerfile: test/e2e/.additionals/stub/Dockerfile
     networks: [cbl-net]
   api-gateway:
     profiles: ["app"]

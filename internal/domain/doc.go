@@ -1,3 +1,3 @@
-// Пакет domain содержит доменные модели и правила периметра: разбор
-// Bearer-заголовка, хэш токена, значения кэша проверки и ключи лимитов.
+// Package domain contains the domain models and perimeter rules: Bearer
+// header parsing, token hashing, check cache values and rate limit keys.
 package domain

@@ -13,20 +13,20 @@ import (
 	"github.com/cbl/cbl-kit/ginmw"
 )
 
-// NewUpstreamProxy собирает reverse proxy к апстриму с бюджетом времени и
-// маскировкой сбоев: клиент получает 503 service_unavailable с Retry-After
-// (контракт 7.1), детали ошибки остаются в логе периметра.
+// NewUpstreamProxy builds a reverse proxy to the upstream with a time budget
+// and failure masking: the client receives 503 service_unavailable with
+// Retry-After (contract 7.1), error details stay in the perimeter log.
 func NewUpstreamProxy(target *url.URL, timeout time.Duration, log *zap.Logger) *httputil.ReverseProxy {
 	if log == nil {
 		log = zap.NewNop()
 	}
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
-			// SetURL направляет запрос на апстрим и подменяет Host на его
-			// собственный: логи и маршрутизация BFF не видят хост периметра.
-			// Входящие forwarding-заголовки удаляются до SetXForwarded: клиент
-			// не может подделать X-Forwarded-For/Host/Proto и Forwarded, апстрим
-			// видит только канонические значения периметра.
+			// SetURL directs the request to the upstream and replaces Host with
+			// the upstream's own one: BFF logs and routing do not see the
+			// perimeter host. Incoming forwarding headers are removed before
+			// SetXForwarded: the client cannot spoof X-Forwarded-For/Host/Proto
+			// or Forwarded, the upstream sees only canonical perimeter values.
 			request.Out.Header.Del("X-Forwarded-For")
 			request.Out.Header.Del("X-Forwarded-Host")
 			request.Out.Header.Del("X-Forwarded-Proto")
@@ -45,8 +45,9 @@ func NewUpstreamProxy(target *url.URL, timeout time.Duration, log *zap.Logger) *
 			ForceAttemptHTTP2:     true,
 		},
 		ModifyResponse: func(response *http.Response) error {
-			// Если апстрим не вернул X-Request-Id, клиент получает id периметра;
-			// при возврате заголовка апстримом дубль не создается (см. proxyHandler).
+			// If the upstream did not return X-Request-Id, the client receives
+			// the perimeter id; when the upstream returns the header no
+			// duplicate is created (see proxyHandler).
 			if response.Header.Get(ginmw.HeaderRequestID) == "" {
 				response.Header.Set(ginmw.HeaderRequestID, response.Request.Header.Get(ginmw.HeaderRequestID))
 			}
@@ -68,8 +69,8 @@ func NewUpstreamProxy(target *url.URL, timeout time.Duration, log *zap.Logger) *
 			}
 			writer.Header().Set("Content-Type", ginmw.ContentTypeProblem)
 			writer.Header().Set("Retry-After", "1")
-			// Ответ 503 несет идентификатор запроса и в заголовке: proxyHandler
-			// снимает предустановленный заголовок ради защиты от дубля.
+			// The 503 response also carries the request id in the header:
+			// proxyHandler removes the preset header to prevent a duplicate.
 			writer.Header().Set(ginmw.HeaderRequestID, requestID)
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(writer).Encode(problem)

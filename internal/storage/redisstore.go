@@ -10,18 +10,19 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// degradeWindow задает окно локального предохранителя: после первой ошибки
-// Redis запросы degradeWindow не обращаются к Redis вовсе, а сразу уходят на
-// локальный лимитер. Без предохранителя каждый запрос платил бы таймауты
-// клиента (до ~1 с на операцию), а при 3000 RPS это тысячи горутин.
+// degradeWindow sets the window of the local circuit breaker: after the first
+// Redis error, requests do not call Redis at all for degradeWindow and go
+// straight to the local limiter. Without the breaker every request would pay
+// client timeouts (up to ~1 s per operation), and at 3000 RPS that is
+// thousands of goroutines.
 const degradeWindow = time.Second
 
-// ErrDegraded означает, что Redis помечен недоступным предохранителем.
+// ErrDegraded means Redis is marked unavailable by the circuit breaker.
 var ErrDegraded = errors.New("redis is degraded")
 
-// redisIncrScript атомарно увеличивает счетчик окна и выставляет TTL, если его
-// нет (ключ мог быть создан извне без TTL): решение лимита не теряет
-// атомарность, счетчики не утекают.
+// redisIncrScript atomically increments the window counter and sets a TTL if
+// there is none (the key could be created externally without a TTL): the
+// limit decision keeps its atomicity and counters do not leak.
 var redisIncrScript = redis.NewScript(`
 local count = redis.call('INCR', KEYS[1])
 if redis.call('PTTL', KEYS[1]) < 0 then
@@ -29,8 +30,8 @@ if redis.call('PTTL', KEYS[1]) < 0 then
 end
 return count`)
 
-// RedisStore обслуживает Redis периметра: кэш проверки ключей и счетчики
-// лимитов.
+// RedisStore serves the perimeter Redis: the key check cache and rate limit
+// counters.
 type RedisStore struct {
 	client *redis.Client
 
@@ -38,9 +39,10 @@ type RedisStore struct {
 	degradedUntil time.Time
 }
 
-// NewRedisStore создает клиент с короткими таймаутами горячего пути: первая
-// ошибка Redis стоит до ~1 с (две попытки с таймаутами 200/300 мс), после чего
-// предохранитель на degradeWindow переключает запросы на локальный лимитер.
+// NewRedisStore creates a client with short hot path timeouts: the first
+// Redis error costs up to ~1 s (two attempts with 200/300 ms timeouts),
+// after which the circuit breaker for degradeWindow switches requests to the
+// local limiter.
 func NewRedisStore(addr string) (*RedisStore, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:                  addr,
@@ -53,17 +55,17 @@ func NewRedisStore(addr string) (*RedisStore, error) {
 	return &RedisStore{client: client}, nil
 }
 
-// Ping проверяет доступность Redis.
+// Ping checks Redis availability.
 func (s *RedisStore) Ping(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
 
-// Close закрывает соединение с Redis.
+// Close closes the Redis connection.
 func (s *RedisStore) Close() error {
 	return s.client.Close()
 }
 
-// Get читает значение ключа; found=false при промахе.
+// Get reads the key value; found is false on a miss.
 func (s *RedisStore) Get(ctx context.Context, key string) (string, bool, error) {
 	if err := s.gate(); err != nil {
 		return "", false, err
@@ -79,8 +81,8 @@ func (s *RedisStore) Get(ctx context.Context, key string) (string, bool, error) 
 	return value, true, nil
 }
 
-// Incr атомарно увеличивает счетчик окна и возвращает значение после
-// инкремента; TTL выставляется, если его нет, счетчики не утекают.
+// Incr atomically increments the window counter and returns the value after
+// the increment; a TTL is set if there is none so counters do not leak.
 func (s *RedisStore) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
 	if err := s.gate(); err != nil {
 		return 0, err
@@ -97,7 +99,8 @@ func (s *RedisStore) Incr(ctx context.Context, key string, ttl time.Duration) (i
 	return count, nil
 }
 
-// gate проверяет предохранитель: в окне деградации обращения к Redis нет.
+// gate checks the circuit breaker: no Redis calls are made within the
+// degradation window.
 func (s *RedisStore) gate() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -107,8 +110,8 @@ func (s *RedisStore) gate() error {
 	return nil
 }
 
-// trip помечает Redis недоступным на degradeWindow; отмена клиента не
-// считается сбоем зависимости и предохранитель не взводит.
+// trip marks Redis unavailable for degradeWindow; a client cancellation is
+// not considered a dependency failure and does not trip the breaker.
 func (s *RedisStore) trip(ctx context.Context, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 		return

@@ -21,36 +21,36 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// fakePeeker управляет значением кэша проверки ключей.
+// fakePeeker controls the value of the API key check cache.
 type fakePeeker struct {
 	value   string
 	present bool
 	err     error
 }
 
-// Get возвращает заданное значение.
+// Get returns the configured value.
 func (f *fakePeeker) Get(_ context.Context, _ string) (string, bool, error) {
 	return f.value, f.present, f.err
 }
 
-// countingPeeker считает обращения к кэшу проверки.
+// countingPeeker counts accesses to the check cache.
 type countingPeeker struct {
 	calls int
 }
 
-// Get считает вызовы и всегда возвращает промах.
+// Get counts calls and always returns a miss.
 func (c *countingPeeker) Get(_ context.Context, _ string) (string, bool, error) {
 	c.calls++
 	return "", false, nil
 }
 
-// fakeCounter управляет счетчиком лимита.
+// fakeCounter controls the limit counter.
 type fakeCounter struct {
 	count int64
 	err   error
 }
 
-// Incr увеличивает счетчик.
+// Incr increments the counter.
 func (f *fakeCounter) Incr(_ context.Context, _ string, _ time.Duration) (int64, error) {
 	if f.err != nil {
 		return 0, f.err
@@ -59,7 +59,7 @@ func (f *fakeCounter) Incr(_ context.Context, _ string, _ time.Duration) (int64,
 	return f.count, nil
 }
 
-// newPerimeter собирает сервис периметра для middleware.
+// newPerimeter builds the perimeter service for the middleware.
 func newPerimeter(t *testing.T, peeker *fakePeeker, counter *fakeCounter, limit int64) *usecase.Perimeter {
 	t.Helper()
 	perimeter, err := usecase.NewPerimeter(peeker, counter, nil, limit, time.Second)
@@ -67,7 +67,7 @@ func newPerimeter(t *testing.T, peeker *fakePeeker, counter *fakeCounter, limit 
 	return perimeter
 }
 
-// probe выполняет запрос к маршруту-пробе.
+// probe performs a request to the probe route.
 func probe(router *gin.Engine, authorization ...string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodGet, "/v1/probe", nil)
 	for _, value := range authorization {
@@ -78,7 +78,7 @@ func probe(router *gin.Engine, authorization ...string) *httptest.ResponseRecord
 	return recorder
 }
 
-// decodeProblem разбирает problem+json тела ответа.
+// decodeProblem decodes the problem+json response body.
 func decodeProblem(t *testing.T, recorder *httptest.ResponseRecorder) ginmw.Problem {
 	t.Helper()
 	var problem ginmw.Problem
@@ -86,7 +86,7 @@ func decodeProblem(t *testing.T, recorder *httptest.ResponseRecorder) ginmw.Prob
 	return problem
 }
 
-// TestKeyPeekUnauthorized проверяет строгую форму заголовка.
+// TestKeyPeekUnauthorized verifies the strict header shape.
 func TestKeyPeekUnauthorized(t *testing.T) {
 	perimeter := newPerimeter(t, &fakePeeker{}, &fakeCounter{}, 10)
 	router := gin.New()
@@ -108,8 +108,8 @@ func TestKeyPeekUnauthorized(t *testing.T) {
 	}
 }
 
-// TestKeyPeekDenied проверяет мгновенный отказ по tombstone без вызова
-// обработчика и без обращения к счетчику (квота не расходуется).
+// TestKeyPeekDenied verifies immediate tombstone rejection without calling the
+// handler and without touching the counter (the quota is not consumed).
 func TestKeyPeekDenied(t *testing.T) {
 	perimeter := newPerimeter(t, &fakePeeker{value: "deny", present: true}, &fakeCounter{}, 10)
 	called := false
@@ -120,11 +120,11 @@ func TestKeyPeekDenied(t *testing.T) {
 	})
 	recorder := probe(router, "Bearer cbl_v1_token")
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	assert.False(t, called, "апстрим не вызывается")
+	assert.False(t, called, "the upstream is not called")
 }
 
-// TestKeyPeekMalformedSkipsPeek проверяет, что нарушение формы заголовка
-// отклоняется без обращения к Redis.
+// TestKeyPeekMalformedSkipsPeek verifies a malformed header is rejected
+// without touching Redis.
 func TestKeyPeekMalformedSkipsPeek(t *testing.T) {
 	counting := &countingPeeker{}
 	perimeter, err := usecase.NewPerimeter(counting, &fakeCounter{}, nil, 10, time.Second)
@@ -133,10 +133,10 @@ func TestKeyPeekMalformedSkipsPeek(t *testing.T) {
 	router.GET("/v1/probe", httpmw.KeyPeek(perimeter), func(c *gin.Context) { c.Status(http.StatusOK) })
 	recorder := probe(router, "Basic abc")
 	require.Equal(t, http.StatusUnauthorized, recorder.Code)
-	assert.Zero(t, counting.calls, "Redis не тронут при битой форме заголовка")
+	assert.Zero(t, counting.calls, "Redis is not touched on a malformed header")
 }
 
-// TestKeyPeekAllowed проверяет идентификатор подтвержденного мерчанта.
+// TestKeyPeekAllowed verifies the identity of the confirmed merchant.
 func TestKeyPeekAllowed(t *testing.T) {
 	merchantID := "01912f2f-6f82-7d5e-8e04-4d4b5b6a1234"
 	perimeter := newPerimeter(t, &fakePeeker{value: "ok:" + merchantID, present: true}, &fakeCounter{}, 10)
@@ -149,7 +149,7 @@ func TestKeyPeekAllowed(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), merchantID)
 }
 
-// TestKeyPeekDelegated проверяет идентификатор промаха и ошибки Redis.
+// TestKeyPeekDelegated verifies the identity on a miss and a Redis error.
 func TestKeyPeekDelegated(t *testing.T) {
 	for name, peeker := range map[string]*fakePeeker{
 		"промах": {},
@@ -163,13 +163,13 @@ func TestKeyPeekDelegated(t *testing.T) {
 				c.JSON(http.StatusOK, gin.H{"identity": httpmw.IdentityFrom(c)})
 			})
 			recorder := probe(router, "Bearer cbl_v1_token")
-			require.Equal(t, http.StatusOK, recorder.Code, "запрос делегируется BFF")
+			require.Equal(t, http.StatusOK, recorder.Code, "the request is delegated to the BFF")
 			assert.Contains(t, recorder.Body.String(), domain.TokenIdentityPrefix+domain.TokenHash("cbl_v1_token"))
 		})
 	}
 }
 
-// TestRateLimitAllowed проверяет пропуск в пределах лимита.
+// TestRateLimitAllowed verifies passing within the limit.
 func TestRateLimitAllowed(t *testing.T) {
 	perimeter := newPerimeter(t, &fakePeeker{}, &fakeCounter{}, 2)
 	router := gin.New()
@@ -183,8 +183,9 @@ func TestRateLimitAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusOK, probe(router).Code)
 }
 
-// TestRateLimitDenied проверяет 429 с Retry-After и кодом контракта; запросы
-// шлются до отказа, чтобы тест не зависел от границы секунды.
+// TestRateLimitDenied verifies 429 with Retry-After and the contract code;
+// requests are sent until rejection so the test does not depend on the second
+// boundary.
 func TestRateLimitDenied(t *testing.T) {
 	perimeter := newPerimeter(t, &fakePeeker{}, &fakeCounter{}, 1)
 	called := false
@@ -207,24 +208,24 @@ func TestRateLimitDenied(t *testing.T) {
 		require.Equal(t, http.StatusOK, recorder.Code)
 		require.True(t, called)
 	}
-	require.NotNil(t, denied, "лимит обязан сработать в пределах нескольких попыток")
-	assert.False(t, called, "апстрим не вызывается при отказе лимита")
+	require.NotNil(t, denied, "the limit must trigger within a few attempts")
+	assert.False(t, called, "the upstream is not called when the limit rejects")
 	assert.Equal(t, "1", denied.Header().Get("Retry-After"))
 	assert.Equal(t, ginmw.ContentTypeProblem, denied.Header().Get("Content-Type"))
 	assert.Equal(t, "rate_limited", decodeProblem(t, denied).Code)
 }
 
-// TestRateLimitWithoutIdentity проверяет защиту от пустой цепочки middleware.
+// TestRateLimitWithoutIdentity verifies protection against an empty middleware chain.
 func TestRateLimitWithoutIdentity(t *testing.T) {
 	perimeter := newPerimeter(t, &fakePeeker{}, &fakeCounter{}, 1)
 	router := gin.New()
 	router.GET("/v1/probe", httpmw.RateLimit(perimeter), func(c *gin.Context) { c.Status(http.StatusOK) })
 	recorder := probe(router)
-	assert.Equal(t, http.StatusUnauthorized, recorder.Code, "лимит без аутентификации не пропускает трафик")
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code, "the limit without authentication does not pass traffic")
 }
 
-// TestSanitizeRequestID проверяет отсев небезопасного клиентского
-// идентификатора запроса до генерации периметра.
+// TestSanitizeRequestID verifies unsafe client request ids are dropped before
+// the perimeter generates its own.
 func TestSanitizeRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -251,13 +252,13 @@ func TestSanitizeRequestID(t *testing.T) {
 				assert.Equal(t, clientID, payload["request_id"])
 				return
 			}
-			assert.NotEqual(t, clientID, payload["request_id"], "небезопасный id заменен сгенерированным")
+			assert.NotEqual(t, clientID, payload["request_id"], "the unsafe id is replaced with a generated one")
 			assert.Len(t, payload["request_id"], 36)
 		})
 	}
 }
 
-// TestForwardRequestID проверяет проброс идентификатора запроса к апстриму.
+// TestForwardRequestID verifies the request id is forwarded to the upstream.
 func TestForwardRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -276,5 +277,5 @@ func TestForwardRequestID(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	assert.Contains(t, recorder.Body.String(), `"request_id":"`)
-	assert.NotContains(t, recorder.Body.String(), `"request_id":""`, "сгенерированный id пробрасывается")
+	assert.NotContains(t, recorder.Body.String(), `"request_id":""`, "the generated id is forwarded")
 }

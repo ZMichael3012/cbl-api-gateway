@@ -18,8 +18,8 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/transport"
 )
 
-// TestUpstreamProxyForwards проверяет сохранение метода, пути, тела и Host
-// апстрима и проброс идентификатора запроса.
+// TestUpstreamProxyForwards verifies that the method, path, body and upstream
+// Host are preserved and the request id is forwarded.
 func TestUpstreamProxyForwards(t *testing.T) {
 	type capture struct {
 		Method    string
@@ -60,12 +60,12 @@ func TestUpstreamProxyForwards(t *testing.T) {
 	assert.Equal(t, "yes", response.Header.Get("X-Upstream"))
 	assert.Equal(t, http.MethodPost, seen.Method)
 	assert.Equal(t, "/v1/invoices", seen.Path)
-	assert.Equal(t, target.Host, seen.Host, "апстрим видит свой Host")
+	assert.Equal(t, target.Host, seen.Host, "the upstream sees its own Host")
 	assert.Equal(t, "req-42", seen.RequestID)
 	assert.Equal(t, "payload", seen.Body)
 }
 
-// TestUpstreamProxyFailure проверяет маскировку сбоя апстрима в 503 контракта.
+// TestUpstreamProxyFailure verifies masking of an upstream failure as the contract 503.
 func TestUpstreamProxyFailure(t *testing.T) {
 	target, err := url.Parse("http://127.0.0.1:1")
 	require.NoError(t, err)
@@ -82,18 +82,18 @@ func TestUpstreamProxyFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusServiceUnavailable, response.StatusCode)
 	assert.Equal(t, "1", response.Header.Get("Retry-After"))
-	assert.Equal(t, "req-503", response.Header.Get(ginmw.HeaderRequestID), "503 несет идентификатор запроса")
+	assert.Equal(t, "req-503", response.Header.Get(ginmw.HeaderRequestID), "the 503 carries the request id")
 	assert.Equal(t, ginmw.ContentTypeProblem, response.Header.Get("Content-Type"))
 	var problem ginmw.Problem
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&problem))
 	assert.Equal(t, "service_unavailable", problem.Code)
 	assert.Equal(t, "req-503", problem.RequestID)
-	assert.NotContains(t, problem.Detail, "127.0.0.1", "детали сбоя наружу не отдаются")
+	assert.NotContains(t, problem.Detail, "127.0.0.1", "failure details are not exposed")
 }
 
-// TestUpstreamProxyStripsForwardingHeaders проверяет, что входящие
-// forwarding-заголовки клиента удаляются: апстрим видит только канонические
-// значения периметра, спуфинг клиентского IP невозможен.
+// TestUpstreamProxyStripsForwardingHeaders verifies incoming client forwarding
+// headers are removed: the upstream sees only canonical perimeter values,
+// client IP spoofing is impossible.
 func TestUpstreamProxyStripsForwardingHeaders(t *testing.T) {
 	var forwardedFor, forwardedHost, realIP, forwarded string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,15 +123,15 @@ func TestUpstreamProxyStripsForwardingHeaders(t *testing.T) {
 	defer func() { _ = response.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, response.StatusCode)
-	assert.NotContains(t, forwardedFor, "203.0.113.7", "клиентский XFF удален")
-	assert.Equal(t, "127.0.0.1", forwardedFor, "XFF содержит только прямой адрес периметра")
-	assert.NotEqual(t, "evil.example.com", forwardedHost, "подмененный host удален")
-	assert.Empty(t, realIP, "X-Real-IP удален")
-	assert.Empty(t, forwarded, "Forwarded удален")
+	assert.NotContains(t, forwardedFor, "203.0.113.7", "client XFF is removed")
+	assert.Equal(t, "127.0.0.1", forwardedFor, "XFF contains only the direct perimeter address")
+	assert.NotEqual(t, "evil.example.com", forwardedHost, "the spoofed host is removed")
+	assert.Empty(t, realIP, "X-Real-IP is removed")
+	assert.Empty(t, forwarded, "Forwarded is removed")
 }
 
-// TestUpstreamProxyExpectContinue проверяет POST с Expect: 100-continue:
-// тело доходит до апстрима, статус не искажается.
+// TestUpstreamProxyExpectContinue verifies POST with Expect: 100-continue:
+// the body reaches the upstream, the status is not distorted.
 func TestUpstreamProxyExpectContinue(t *testing.T) {
 	var body string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func TestUpstreamProxyExpectContinue(t *testing.T) {
 	assert.Equal(t, "payload", body)
 }
 
-// readBody вычитывает тело запроса в тестовом обработчике.
+// readBody reads the request body in a test handler.
 func readBody(t *testing.T, request *http.Request) string {
 	t.Helper()
 	defer func() { _ = request.Body.Close() }()

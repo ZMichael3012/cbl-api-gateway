@@ -1,3 +1,3 @@
-// Пакет transport содержит транспортный слой периметра: маршрутизацию /v1 и
-// /admin/v1, reverse proxy к апстримам и HTTP-middleware.
+// Package transport contains the perimeter transport layer: /v1 and /admin/v1
+// routing, reverse proxy to upstreams and HTTP middleware.
 package transport

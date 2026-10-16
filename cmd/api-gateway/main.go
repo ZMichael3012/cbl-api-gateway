@@ -1,4 +1,4 @@
-// main запускает HTTP-сервис api-gateway платформы CBL.
+// Command api-gateway starts the CBL platform HTTP gateway service.
 package main
 
 import (
@@ -20,12 +20,13 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// rateWindow задает фиксированное окно лимита периметра: ключи счетчиков
-// выровнены по секунде контракта CBL-003.
+// rateWindow sets the fixed perimeter rate limit window: counter keys are
+// aligned by second per the CBL-003 contract.
 const rateWindow = time.Second
 
-// main запускает сервис и завершает процесс ненулевым кодом при ошибке
-// инициализации (оркестратор должен видеть отказ, а не успешный выход).
+// main starts the service and exits the process with a non-zero code on
+// initialization failure (the orchestrator must see a failure, not a
+// successful exit).
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "fatal:", err)
@@ -33,7 +34,8 @@ func main() {
 	}
 }
 
-// run собирает зависимости периметра и обслуживает запросы до сигнала остановки.
+// run assembles the perimeter dependencies and serves requests until a stop
+// signal.
 func run() error {
 	log, err := zap.NewProduction()
 	if err != nil {
@@ -67,8 +69,8 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Redis опционален: без него лимиты считает локальный лимитер инстанса
-	// (точность падает, обслуживание не отказывает - T-11).
+	// Redis is optional: without it the limits are counted by the local
+	// instance limiter (accuracy drops, service does not fail - T-11).
 	local := storage.NewLocalLimiter()
 	var counter usecase.Counter = local
 	var peeker usecase.KeyPeeker
@@ -113,9 +115,10 @@ func run() error {
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		// WriteTimeout покрывает и стриминг ответа апстрима, поэтому выводится
-		// из бюджета UPSTREAM_TIMEOUT с запасом, иначе контрактный 503/ответ не
-		// дойдет до клиента при больших значениях бюджета.
+		// WriteTimeout also covers upstream response streaming, so it is
+		// derived from the UPSTREAM_TIMEOUT budget with a margin; otherwise
+		// the contract 503/response would not reach the client with large
+		// budget values.
 		WriteTimeout: upstreamTimeout + 5*time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
@@ -139,16 +142,16 @@ func run() error {
 		}
 	}()
 
-	// Сбой листенера обязан завершить процесс ненулевым кодом (restart-политика
-	// оркестратора), а не выглядеть штатной остановкой.
+	// A listener failure must terminate the process with a non-zero code
+	// (orchestrator restart policy) rather than look like a regular shutdown.
 	var serveFailure error
 	select {
 	case <-ctx.Done():
 	case serveFailure = <-serveErrors:
 	}
 	if serveFailure == nil {
-		// Оба канала могли стать готовы одновременно: ошибка не должна
-		// потеряться из-за случайного выбора ветки select.
+		// Both channels could become ready at the same time: the error must
+		// not be lost because of a random select branch choice.
 		select {
 		case serveFailure = <-serveErrors:
 		default:
@@ -167,7 +170,7 @@ func run() error {
 	return serveFailure
 }
 
-// metricsHandler отдает заглушку метрик до задачи 0.7.
+// metricsHandler serves a metrics placeholder until task 0.7.
 func metricsHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
@@ -177,7 +180,7 @@ func metricsHandler() http.Handler {
 	return mux
 }
 
-// getenv возвращает переменную окружения или значение по умолчанию.
+// getenv returns an environment variable or the default value.
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -185,8 +188,8 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-// durationEnv разбирает duration из окружения; невалидное значение - ошибка
-// (fail-safe против молчаливой опечатки в конфигурации).
+// durationEnv parses a duration from the environment; an invalid value is an
+// error (fail-safe against a silent configuration typo).
 func durationEnv(name string, fallback time.Duration) (time.Duration, error) {
 	value := os.Getenv(name)
 	if value == "" {
@@ -199,8 +202,8 @@ func durationEnv(name string, fallback time.Duration) (time.Duration, error) {
 	return parsed, nil
 }
 
-// positiveIntEnv разбирает положительное целое из окружения; невалидное или
-// неположительное значение - ошибка (лимит влияет на защиту периметра).
+// positiveIntEnv parses a positive integer from the environment; an invalid
+// or non-positive value is an error (the limit affects perimeter protection).
 func positiveIntEnv(name string, fallback int64) (int64, error) {
 	value := os.Getenv(name)
 	if value == "" {
@@ -216,9 +219,10 @@ func positiveIntEnv(name string, fallback int64) (int64, error) {
 	return parsed, nil
 }
 
-// urlEnv разбирает URL апстрима из окружения; допускаются только http и https
-// с непустым хостом без userinfo, query и fragment (защита от SSRF через
-// конфигурацию и утечки креденшелов в логи).
+// urlEnv parses an upstream URL from the environment; only http and https
+// with a non-empty host and without userinfo, query and fragment are allowed
+// (protection from SSRF via configuration and from credential leaks into
+// logs).
 func urlEnv(name, fallback string) (*url.URL, error) {
 	value := getenv(name, fallback)
 	parsed, err := url.Parse(value)

@@ -1,4 +1,4 @@
-.PHONY: build test test-integration e2e vet lint fmt up down
+.PHONY: build test test-integration vet lint fmt up down
 
 build:
 	go build ./...
@@ -6,14 +6,13 @@ build:
 test:
 	go test ./...
 
-# test-integration гоняет integration-тесты (testcontainers: Redis).
+# test-integration runs the integration tests (testcontainers: Redis).
 test-integration:
 	go test -tags integration -count=1 ./internal/...
 
-# e2e поднимает compose-стенд: redis, stub-апстрим и периметр; проверяет
-# маршрутизацию, контроль ключей и лимиты (CBL-7.5).
-e2e:
-	powershell -NoProfile -File test/e2e/rate_limit.ps1
+# E2E: a run is performed by an agent following the test/e2e/E2E.md instruction
+# (platform-independent; artifacts go to test/e2e/.runs/<UTC mark>/); there are
+# no PowerShell run scripts.
 
 vet:
 	go vet ./...
@@ -25,7 +24,7 @@ lint:
 fmt:
 	gofmt -l .
 
-# up поднимает стенд сервиса (redis + stub-апстрим + периметр).
+# up brings up the service stand (redis + stub upstream + perimeter).
 up:
 	docker compose -f deploy/docker-compose.yml --profile app up -d --build
 

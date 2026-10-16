@@ -1,3 +1,3 @@
-// Пакет storage содержит хранилища периметра: Redis-кэш проверки ключей
-// (контракт 7.2) и счетчики лимитов (Redis и in-process fallback).
+// Package storage contains the perimeter stores: the Redis key check cache
+// (contract 7.2) and rate limit counters (Redis and in-process fallback).
 package storage

@@ -8,44 +8,44 @@ import (
 	"strings"
 )
 
-// Константы контрактов периметра (CBL-7.2 FR-6, CBL-003 раздел 7).
+// Perimeter contract constants (CBL-7.2 FR-6, CBL-003 section 7).
 const (
-	// APIKeyCachePrefix задает префикс ключа Redis с результатом проверки API-ключа.
+	// APIKeyCachePrefix sets the prefix of the Redis key with the API key check result.
 	APIKeyCachePrefix = "apikey:v1:"
-	// RateLimitPrefix задает префикс ключа Redis со счетчиком лимита.
+	// RateLimitPrefix sets the prefix of the Redis key with the rate limit counter.
 	RateLimitPrefix = "rl:"
-	// TokenIdentityPrefix задает префикс идентификатора лимита для неизвестного ключа.
+	// TokenIdentityPrefix sets the rate limit identity prefix for an unknown key.
 	TokenIdentityPrefix = "token:"
-	// RouteRoot задает группу лимита для путей без сегмента после /v1.
+	// RouteRoot sets the limit group for paths with no segment after /v1.
 	RouteRoot = "root"
-	// RouteOther задает группу лимита для нераспознанных сегментов пути.
+	// RouteOther sets the limit group for unrecognized path segments.
 	RouteOther = "other"
-	// routeMaxLength задает предельную длину группы лимита.
+	// routeMaxLength sets the maximum length of a limit group.
 	routeMaxLength = 32
 )
 
-// merchantIDPattern повторяет формат merchant_id платформы (CBL-7.2):
-// произвольная строка [A-Za-z0-9_-] длиной до 128 символов, а не только UUID
-// (ops-CLI и тестовые стенды используют короткие идентификаторы вида m-1).
+// merchantIDPattern repeats the platform merchant_id format (CBL-7.2):
+// an arbitrary [A-Za-z0-9_-] string of up to 128 characters, not only a UUID
+// (ops CLI and test stands use short identifiers like m-1).
 var merchantIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
-// KeyStatus описывает исход чтения кэша проверки API-ключа.
+// KeyStatus describes the outcome of reading the API key check cache.
 type KeyStatus int
 
 const (
-	// KeyMiss означает промах кэша: решение о ключе принимает Billing API.
+	// KeyMiss means a cache miss: the decision about the key is made by the Billing API.
 	KeyMiss KeyStatus = iota
-	// KeyAllowed означает подтвержденный ключ с известным мерчантом.
+	// KeyAllowed means a confirmed key with a known merchant.
 	KeyAllowed
-	// KeyDenied означает tombstone отозванного ключа.
+	// KeyDenied means a tombstone of a revoked key.
 	KeyDenied
-	// KeyInvalid означает испорченное значение кэша: трактуется как промах.
+	// KeyInvalid means a corrupted cache value: it is treated as a miss.
 	KeyInvalid
 )
 
-// AuthorizationToken извлекает Bearer-токен из значений заголовка
-// Authorization: заголовок должен быть ровно один, схема регистронезависима
-// по RFC 7235, токен без пробелов (правила CBL-7.2).
+// AuthorizationToken extracts the Bearer token from Authorization header
+// values: there must be exactly one header, the scheme is case-insensitive
+// per RFC 7235, the token contains no spaces (CBL-7.2 rules).
 func AuthorizationToken(headers []string) (string, bool) {
 	if len(headers) != 1 {
 		return "", false
@@ -61,21 +61,22 @@ func AuthorizationToken(headers []string) (string, bool) {
 	return token, true
 }
 
-// TokenHash возвращает hex sha256 токена: ключ кэша проверки на периметре и
-// идентификатор лимита для неизвестных ключей.
+// TokenHash returns the hex sha256 of the token: the perimeter check cache
+// key and the rate limit identity for unknown keys.
 func TokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
 
-// APIKeyCacheKey возвращает ключ Redis кэша проверки для хэша токена.
+// APIKeyCacheKey returns the Redis check cache key for a token hash.
 func APIKeyCacheKey(tokenHash string) string {
 	return APIKeyCachePrefix + tokenHash
 }
 
-// ParseKeyCacheValue разбирает значение кэша проверки: deny запрещает запрос,
-// ok:<merchant_id> подтверждает мерчанта (формат merchant_id как в 7.2),
-// промах и испорченное значение делегируют решение Billing API (источник истины).
+// ParseKeyCacheValue parses a check cache value: deny rejects the request,
+// ok:<merchant_id> confirms the merchant (merchant_id format as in 7.2),
+// a miss and a corrupted value delegate the decision to the Billing API
+// (the source of truth).
 func ParseKeyCacheValue(value string, present bool) (KeyStatus, string) {
 	if !present {
 		return KeyMiss, ""
@@ -93,9 +94,9 @@ func ParseKeyCacheValue(value string, present bool) (KeyStatus, string) {
 	return KeyAllowed, merchantID
 }
 
-// RouteGroup нормализует первый сегмент пути после префикса /v1 в группу
-// лимита: нижний регистр, [a-z0-9-]{1,32}; пустой сегмент - root,
-// нераспознанный - other.
+// RouteGroup normalizes the first path segment after the /v1 prefix into a
+// limit group: lower case, [a-z0-9-]{1,32}; an empty segment is root,
+// an unrecognized one is other.
 func RouteGroup(path string) string {
 	trimmed := strings.TrimPrefix(path, "/v1")
 	trimmed = strings.TrimPrefix(trimmed, "/")
@@ -116,10 +117,10 @@ func RouteGroup(path string) string {
 	return segment
 }
 
-// IdentityKey возвращает идентификатор лимита: merchant_id при известном
-// ключе или token:<hex> для промаха кэша (натуральные границы и NAT-адреса
-// мерчантов не штрафуют друг друга). Формат merchant_id не содержит двоеточия,
-// поэтому пространство ключей `rl:` остается непротиворечивым.
+// IdentityKey returns the rate limit identity: merchant_id for a known key
+// or token:<hex> for a cache miss (natural boundaries and merchant NAT
+// addresses do not penalize each other). The merchant_id format contains no
+// colon, so the `rl:` key space remains consistent.
 func IdentityKey(merchantID, tokenHash string) string {
 	if merchantID != "" {
 		return merchantID
@@ -127,7 +128,7 @@ func IdentityKey(merchantID, tokenHash string) string {
 	return TokenIdentityPrefix + tokenHash
 }
 
-// RateLimitKey собирает ключ счетчика лимита rl:{identity}:{route}:{window}.
+// RateLimitKey builds the rate limit counter key rl:{identity}:{route}:{window}.
 func RateLimitKey(identity, route string, window int64) string {
 	return RateLimitPrefix + identity + ":" + route + ":" + strconv.FormatInt(window, 10)
 }

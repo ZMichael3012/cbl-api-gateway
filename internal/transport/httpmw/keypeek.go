@@ -7,10 +7,11 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// KeyPeek возвращает middleware контроля API-ключа на периметре (контракт
-// 7.2 FR-6): строгий Bearer, чтение apikey:v1, deny запрещает запрос без
-// похода в Billing API; промах делегируется BFF (источник истины), а
-// идентификатор лимита (мерчант или token:<hex>) кладется в контекст.
+// KeyPeek returns the API key control middleware for the perimeter (contract
+// 7.2 FR-6): strict Bearer parsing, apikey:v1 read, deny rejects the request
+// without calling the Billing API; a miss is delegated to the BFF (the source
+// of truth), and the limit identity (merchant or token:<hex>) is put into the
+// context.
 func KeyPeek(perimeter *usecase.Perimeter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, ok := domain.AuthorizationToken(c.Request.Header.Values("Authorization"))
@@ -21,7 +22,7 @@ func KeyPeek(perimeter *usecase.Perimeter) gin.HandlerFunc {
 		tokenHash := domain.TokenHash(token)
 		check := perimeter.CheckKey(c.Request.Context(), tokenHash)
 		if check.Deny {
-			// Tombstone отозванного ключа: отказ до апстрима, как в BFF 7.2.
+			// Revoked key tombstone: reject before the upstream, same as BFF 7.2.
 			AbortUnauthorized(c)
 			return
 		}

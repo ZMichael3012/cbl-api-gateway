@@ -20,29 +20,29 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// fakePeeker управляет значением кэша проверки ключей.
+// fakePeeker controls the value of the API key check cache.
 type fakePeeker struct {
 	value   string
 	present bool
 }
 
-// Get возвращает заданное значение.
+// Get returns the configured value.
 func (f *fakePeeker) Get(_ context.Context, _ string) (string, bool, error) {
 	return f.value, f.present, nil
 }
 
-// windowCounter считает по ключам окна, как Redis.
+// windowCounter counts by window keys like Redis.
 type windowCounter struct {
 	counts map[string]int64
 }
 
-// Incr увеличивает счетчик ключа.
+// Incr increments the key counter.
 func (c *windowCounter) Incr(_ context.Context, key string, _ time.Duration) (int64, error) {
 	c.counts[key]++
 	return c.counts[key], nil
 }
 
-// newBackend поднимает stub-апстрим, отражающий путь и идентификатор запроса.
+// newBackend starts a stub upstream that echoes the path and the request id.
 func newBackend(t *testing.T) *httptest.Server {
 	t.Helper()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +56,7 @@ func newBackend(t *testing.T) *httptest.Server {
 	return backend
 }
 
-// newPerimeter собирает сервис периметра на локальном счетчике.
+// newPerimeter builds the perimeter service on a local counter.
 func newPerimeter(t *testing.T, peeker *fakePeeker, limit int64) *usecase.Perimeter {
 	t.Helper()
 	perimeter, err := usecase.NewPerimeter(peeker, &windowCounter{counts: map[string]int64{}}, nil, limit, time.Second)
@@ -64,7 +64,7 @@ func newPerimeter(t *testing.T, peeker *fakePeeker, limit int64) *usecase.Perime
 	return perimeter
 }
 
-// newRouter собирает периметр с одним stub-апстримом.
+// newRouter builds the perimeter with a single stub upstream.
 func newRouter(t *testing.T, peeker *fakePeeker, limit int64) (*gin.Engine, *httptest.Server) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -81,7 +81,7 @@ func newRouter(t *testing.T, peeker *fakePeeker, limit int64) (*gin.Engine, *htt
 	return router, backend
 }
 
-// doRouter выполняет запрос через маршрутизатор периметра.
+// doRouter performs a request through the perimeter router.
 func doRouter(router *gin.Engine, method, path, authorization string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, nil)
 	if authorization != "" {
@@ -92,7 +92,7 @@ func doRouter(router *gin.Engine, method, path, authorization string) *httptest.
 	return recorder
 }
 
-// decodeProblem разбирает problem+json ответа.
+// decodeProblem decodes the problem+json response body.
 func decodeProblem(t *testing.T, recorder *httptest.ResponseRecorder) ginmw.Problem {
 	t.Helper()
 	var problem ginmw.Problem
@@ -100,7 +100,7 @@ func decodeProblem(t *testing.T, recorder *httptest.ResponseRecorder) ginmw.Prob
 	return problem
 }
 
-// TestRouterValidation проверяет fail-fast сборки маршрутов.
+// TestRouterValidation verifies route construction fail-fast.
 func TestRouterValidation(t *testing.T) {
 	_, err := transport.NewRouter(transport.Config{})
 	require.Error(t, err)
@@ -109,11 +109,11 @@ func TestRouterValidation(t *testing.T) {
 	upstream, err := url.Parse("http://localhost:9999")
 	require.NoError(t, err)
 	_, err = transport.NewRouter(transport.Config{Perimeter: perimeter, BillingAPI: upstream, Backoffice: upstream})
-	require.Error(t, err, "нулевой бюджет времени запрещен")
+	require.Error(t, err, "zero time budget is forbidden")
 }
 
-// TestRouterUpstreamMapping проверяет, что /v1 уходит только в Billing API, а
-// /admin/v1 - только в Back-office.
+// TestRouterUpstreamMapping verifies that /v1 goes only to the Billing API and
+// /admin/v1 goes only to the Back-office.
 func TestRouterUpstreamMapping(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	billing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -147,7 +147,7 @@ func TestRouterUpstreamMapping(t *testing.T) {
 	assert.NotContains(t, adminRoute.Body.String(), "billing")
 }
 
-// TestRouterNotFound проверяет 404 problem+json для неизвестного пути.
+// TestRouterNotFound verifies the 404 problem+json for an unknown path.
 func TestRouterNotFound(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{}, 10)
 	recorder := doRouter(router, http.MethodGet, "/unknown", "")
@@ -156,8 +156,8 @@ func TestRouterNotFound(t *testing.T) {
 	assert.Equal(t, "not_found", decodeProblem(t, recorder).Code)
 }
 
-// TestRouterV1Allowed проверяет проксирование подтвержденного ключа и проброс
-// идентификатора запроса до апстрима.
+// TestRouterV1Allowed verifies proxying of a confirmed key and forwarding of
+// the request id to the upstream.
 func TestRouterV1Allowed(t *testing.T) {
 	merchantID := "01912f2f-6f82-7d5e-8e04-4d4b5b6a1234"
 	router, _ := newRouter(t, &fakePeeker{value: "ok:" + merchantID, present: true}, 10)
@@ -168,12 +168,12 @@ func TestRouterV1Allowed(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"path":"/v1/invoices/42"`)
-	assert.Contains(t, recorder.Body.String(), `"request_id":"req-it-0001"`, "сквозной идентификатор доходит до апстрима")
+	assert.Contains(t, recorder.Body.String(), `"request_id":"req-it-0001"`, "the end-to-end id reaches the upstream")
 	assert.Equal(t, "req-it-0001", recorder.Header().Get(ginmw.HeaderRequestID))
-	assert.Len(t, recorder.Header().Values(ginmw.HeaderRequestID), 1, "заголовок ответа не дублируется")
+	assert.Len(t, recorder.Header().Values(ginmw.HeaderRequestID), 1, "the response header is not duplicated")
 }
 
-// TestRouterV1Denied проверяет отказ tombstone без вызова апстрима.
+// TestRouterV1Denied verifies tombstone rejection without calling the upstream.
 func TestRouterV1Denied(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{value: "deny", present: true}, 10)
 	recorder := doRouter(router, http.MethodGet, "/v1/invoices/42", "Bearer cbl_v1_token")
@@ -181,8 +181,9 @@ func TestRouterV1Denied(t *testing.T) {
 	assert.Equal(t, `Bearer realm="billing"`, recorder.Header().Get("WWW-Authenticate"))
 }
 
-// TestRouterV1RateLimited проверяет 429 на маршруте после превышения лимита;
-// запросы шлются до отказа, чтобы тест не зависел от границы секунды.
+// TestRouterV1RateLimited verifies 429 on the route after the limit is
+// exceeded; requests are sent until rejection so the test does not depend on
+// the second boundary.
 func TestRouterV1RateLimited(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{}, 1)
 	var denied *httptest.ResponseRecorder
@@ -194,20 +195,20 @@ func TestRouterV1RateLimited(t *testing.T) {
 		}
 		require.Equal(t, http.StatusOK, recorder.Code)
 	}
-	require.NotNil(t, denied, "лимит обязан сработать в пределах нескольких попыток")
+	require.NotNil(t, denied, "the limit must trigger within a few attempts")
 	assert.Equal(t, "1", denied.Header().Get("Retry-After"))
 	assert.Equal(t, ginmw.ContentTypeProblem, denied.Header().Get("Content-Type"))
 	assert.Equal(t, "rate_limited", decodeProblem(t, denied).Code)
 }
 
-// TestRouterMissDelegated проверяет делегирование неизвестного ключа BFF.
+// TestRouterMissDelegated verifies an unknown key is delegated to the BFF.
 func TestRouterMissDelegated(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{}, 10)
 	recorder := doRouter(router, http.MethodGet, "/v1/invoices", "Bearer cbl_v1_token")
-	assert.Equal(t, http.StatusOK, recorder.Code, "решение о ключе принимает BFF")
+	assert.Equal(t, http.StatusOK, recorder.Code, "the BFF makes the key decision")
 }
 
-// TestRouterAdminProxy проверяет проксирование /admin/v1 без лимита мерчанта.
+// TestRouterAdminProxy verifies /admin/v1 proxying without a merchant limit.
 func TestRouterAdminProxy(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{}, 10)
 	recorder := doRouter(router, http.MethodGet, "/admin/v1/payouts", "")
@@ -215,8 +216,9 @@ func TestRouterAdminProxy(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), `"path":"/admin/v1/payouts"`)
 }
 
-// TestRouterBarePaths проверяет отключение редиректов Gin и пути без сегментов:
-// POST не теряет тело на 301, /v1 и /v1/ проксируются как есть.
+// TestRouterBarePaths verifies Gin redirects are disabled and paths without
+// segments work: POST does not lose its body to a 301, /v1 and /v1/ are
+// proxied as is.
 func TestRouterBarePaths(t *testing.T) {
 	router, _ := newRouter(t, &fakePeeker{}, 10)
 	for _, path := range []string{"/v1", "/v1/"} {
@@ -228,11 +230,11 @@ func TestRouterBarePaths(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer cbl_v1_token")
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
-	assert.Equal(t, http.StatusOK, recorder.Code, "POST не редиректится")
+	assert.Equal(t, http.StatusOK, recorder.Code, "POST is not redirected")
 }
 
-// TestRouterStreamingFlush проверяет потоковый ответ (SSE): обертка
-// proxyWriter пробрасывает Flush, тело доходит целиком.
+// TestRouterStreamingFlush verifies a streaming response (SSE): the
+// proxyWriter wrapper forwards Flush, the body arrives in full.
 func TestRouterStreamingFlush(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -259,11 +261,11 @@ func TestRouterStreamingFlush(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), "data: one")
 	assert.Contains(t, recorder.Body.String(), "data: two")
-	assert.True(t, recorder.Flushed, "потоковые данные отправляются без буферизации")
+	assert.True(t, recorder.Flushed, "streaming data is sent without buffering")
 }
 
-// TestRouterRequestIDFallback проверяет, что ответ без заголовка апстрима
-// получает идентификатор периметра один раз.
+// TestRouterRequestIDFallback verifies a response without the upstream header
+// receives the perimeter id exactly once.
 func TestRouterRequestIDFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

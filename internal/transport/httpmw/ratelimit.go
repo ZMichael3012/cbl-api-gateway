@@ -13,15 +13,15 @@ import (
 	"github.com/cbl/cbl-api-gateway/internal/usecase"
 )
 
-// RateLimit возвращает middleware лимита запросов мерчанта: счетчик окна
-// (Redis, при отказе - локальный), при превышении 429 rate_limited с
-// Retry-After в формате контракта 7.1; апстрим не вызывается.
+// RateLimit returns the merchant request limit middleware: a window counter
+// (Redis, local on failure), over the limit 429 rate_limited with Retry-After
+// in contract 7.1 format; the upstream is not called.
 func RateLimit(perimeter *usecase.Perimeter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		identity := IdentityFrom(c)
 		if identity == "" {
-			// Лимит без аутентификации не должен молча пропускать трафик:
-			// пустой идентификатор означает ошибку сборки цепочки middleware.
+			// The limit without authentication must not silently pass traffic:
+			// an empty identity means a middleware chain assembly error.
 			AbortUnauthorized(c)
 			return
 		}
