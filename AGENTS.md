@@ -81,9 +81,11 @@ local only, WARN; key control is delegated to the BFF). Invalid upstream URLs
 
 ## 6. Development rules
 
-- Pipeline: an SDD spec in `.specs/` -> architecture -> contracts -> tests first -> code ->
-  4 reviews (no-context, architecture, with-context, security - blocking) -> AGENTS.md ->
-  final runs -> linters -> commit.
+- Pipeline (TDD-first, CBL-001): an SDD spec with the architecture sketch and the full test
+  plan (unit and integration matrices, e2e scenario descriptions) -> contracts -> red tests
+  with recorded evidence -> implementation -> 4-agent review on the staged diff (no-context,
+  architecture, with-context, security - blocking) -> AGENTS.md -> final runs (unit +
+  integration + local e2e) -> linters -> commit.
 - Unit+integration coverage is at least 80% (currently 96.4%).
 - E2E: a mandatory local run following `test/e2e/E2E.md` (an agent, no PowerShell scripts);
   artifacts go to `test/e2e/.runs/<UTC mark>/` (mandatory `summary.md`, `compose-ps.txt`,
