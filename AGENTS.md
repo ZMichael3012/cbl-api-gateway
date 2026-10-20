@@ -59,7 +59,7 @@ make build             # go build ./...
 make test              # go test ./...
 make test-integration  # integration (testcontainers: Redis)
 make vet               # go vet ./... (+ integration e2e tags)
-make lint              # golangci-lint in Docker (services/ context for cbl-kit)
+make lint              # golangci-lint in Docker (repo context; modules from GitHub)
 make up                # docker compose -f deploy/docker-compose.yml --profile app up -d --build
 make down              # docker compose -f deploy/docker-compose.yml down -v
 ```
@@ -141,6 +141,7 @@ p95/p99, the upstream error share.
 | :-- | :-- | :-- | :-- | :-- |
 | CBL-7.5 | 2026-10-15 | done, review closed (the perimeter: reverse proxy of /v1 and /admin/v1, key control by the 7.2 cache, a per-merchant limit in Redis with a breaker and a local fallback, 429/503/404 problem+json; coverage 96.4%) | `.specs/CBL-7.5-rate-limit.md` | 5c58110 |
 | CBL-16.4 | 2026-10-16 | done (English comments and documentation across the repository: code, tests, configs, the 7.5 spec, AGENTS.md, README; e2e runs via `test/e2e/E2E.md` with the stub in `.additionals/` and artifacts in `.runs/`; validation run PASS; coverage unchanged 96.4%) | `.specs/CBL-16.4-conventions.md` | this commit |
+| CBL-0.9 | 2026-10-20 | done (cbl-kit and cbl-protos are pinned remote modules fetched from the GitHub origin; no local replace directives; Docker builds from the repository root; the lint container fetches the modules via GOPRIVATE and the git insteadOf rewrite) | `../../.specs/CBL-0.9-remote-modules.md` (umbrella) | this commit |
 
 ## 11. Runbook
 
