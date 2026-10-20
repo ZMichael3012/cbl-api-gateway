@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/ginmw"
+	"github.com/ZMichael3012/cbl-kit/ginmw"
 
 	"github.com/cbl/cbl-api-gateway/internal/domain"
 	"github.com/cbl/cbl-api-gateway/internal/transport/httpmw"

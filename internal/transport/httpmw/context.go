@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/cbl/cbl-kit/ginmw"
+	"github.com/ZMichael3012/cbl-kit/ginmw"
 )
 
 // contextKeyIdentity sets the gin context key for the limit identity.

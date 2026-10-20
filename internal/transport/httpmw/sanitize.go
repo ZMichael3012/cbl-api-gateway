@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/cbl/cbl-kit/ginmw"
+	"github.com/ZMichael3012/cbl-kit/ginmw"
 )
 
 // requestIDPattern sets the allowed shape of a client request id.

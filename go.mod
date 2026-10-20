@@ -3,7 +3,7 @@ module github.com/cbl/cbl-api-gateway
 go 1.26.0
 
 require (
-	github.com/cbl/cbl-kit v0.0.0-20261020024025-deb4e66f1a90
+	github.com/ZMichael3012/cbl-kit v0.0.0-20261020172811-9830b1912eb6
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.23.0

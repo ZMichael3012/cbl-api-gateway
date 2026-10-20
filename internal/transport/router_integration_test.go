@@ -18,7 +18,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/cbl/cbl-kit/ginmw"
+	"github.com/ZMichael3012/cbl-kit/ginmw"
 
 	"github.com/cbl/cbl-api-gateway/internal/domain"
 	"github.com/cbl/cbl-api-gateway/internal/storage"
